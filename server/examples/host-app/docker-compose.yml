@@ -1,0 +1,13 @@
+# MySQL + Redis cho app thử. Chạy app: npx ts-node examples/host-app/src/main.ts
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: example
+      MYSQL_DATABASE: game
+    ports:
+      - "127.0.0.1:3306:3306"
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
