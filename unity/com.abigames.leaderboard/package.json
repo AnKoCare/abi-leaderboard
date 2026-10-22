@@ -1,0 +1,24 @@
+{
+  "name": "com.abigames.leaderboard",
+  "version": "0.1.0",
+  "displayName": "AbiGames Leaderboard",
+  "description": "Client bảng xếp hạng người chơi (World + theo quốc gia) cho server @abigames/leaderboard-server: gọi API, tải trang đầu rồi tải nền phần còn lại, cache đĩa, gửi điểm có gộp + thử lại. Cần UniTask (thêm vào manifest của project).",
+  "unity": "2022.3",
+  "author": {
+    "name": "AbiGames"
+  },
+  "keywords": [
+    "leaderboard",
+    "abigames"
+  ],
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  },
+  "samples": [
+    {
+      "displayName": "Offline Demo",
+      "description": "Chạy bảng xếp hạng với server giả lập trong bộ nhớ, in kết quả ra Console — không cần backend.",
+      "path": "Samples~/OfflineDemo"
+    }
+  ]
+}

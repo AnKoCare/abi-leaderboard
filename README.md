@@ -6,6 +6,6 @@ AbiGames, tách từ Colony Flow.
 | Thư mục | Nội dung | Trạng thái |
 |---|---|---|
 | [`server/`](server/README.md) | Module NestJS `@abigames/leaderboard-server` | 0.1.0 — xong, có unit + integration test |
-| `unity/` | Package UPM `com.abigames.leaderboard` (core + UI uGUI) | chưa làm (pha 2–3) |
+| [`unity/com.abigames.leaderboard`](unity/com.abigames.leaderboard/README.md) | Package UPM `com.abigames.leaderboard` | 0.1.0 — core xong (47 test EditMode trên Unity 6000.3); UI uGUI ở pha 3 |
 
 Plan đầy đủ: `docs/LEADERBOARD_PACKAGE_PLAN.md` trong repo game-backend.
