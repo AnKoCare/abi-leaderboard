@@ -1,0 +1,21 @@
+{
+    "name": "AbiGames.Leaderboard.Editor",
+    "rootNamespace": "AbiGames.Leaderboard.Editor",
+    "references": [
+        "AbiGames.Leaderboard",
+        "AbiGames.Leaderboard.UI",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

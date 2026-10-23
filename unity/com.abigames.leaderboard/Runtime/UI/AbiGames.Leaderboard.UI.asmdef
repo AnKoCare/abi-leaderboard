@@ -1,0 +1,21 @@
+{
+    "name": "AbiGames.Leaderboard.UI",
+    "rootNamespace": "AbiGames.Leaderboard.UI",
+    "references": [
+        "AbiGames.Leaderboard",
+        "UniTask",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

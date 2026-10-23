@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.0 — 23/10/2026
+
+Thêm phần UI (assembly `AbiGames.Leaderboard.UI`, uGUI + TextMeshPro). Từ bản này cần **Unity 6**.
+
+- `LeaderboardVirtualList`: danh sách cuộn ảo tách từ AntFood (chỉ còn chế độ người chơi). Nối
+  thêm dữ liệu (trang đầu → đủ bảng) không vẽ lại các ô đang hiện; thêm `ScrollToIndex`.
+- `LeaderboardCellBase` + `DefaultLeaderboardCell`: game kế thừa ô gốc để vẽ theo phong cách riêng.
+- `LeaderboardBoardView`: một bảng + ô "hạng của tôi" (người ngoài top dùng `SelfProfileProvider`)
+  + trạng thái đang tải / trống / lỗi / dữ liệu cache.
+- `LeaderboardTabsView`: tab World / Country / board cố định, có điều kiện khoá.
+- `LeaderboardScrollJumpButtons`: thêm nút "tới hạng của tôi".
+- `LeaderboardAvatarSet`, `LeaderboardCountryFlagSet`.
+- `LeaderboardPanelFactory` + menu *Tools → AbiGames → Leaderboard → Create Sample Panel*.
+- `LeaderboardRuntime`: chỗ giữ client / loader / submitter dùng chung, thay cho việc dò Zenject
+  SceneContext như AntFood.
+- Mẫu UI Demo; test PlayMode cho UI.
+
 ## 0.1.0 — 22/10/2026
 
 Bản đầu: phần core, chưa có UI.

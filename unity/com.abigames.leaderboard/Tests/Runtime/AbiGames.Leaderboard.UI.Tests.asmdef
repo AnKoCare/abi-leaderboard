@@ -1,0 +1,26 @@
+{
+    "name": "AbiGames.Leaderboard.UI.Tests",
+    "rootNamespace": "AbiGames.Leaderboard.UI.Tests",
+    "references": [
+        "AbiGames.Leaderboard",
+        "AbiGames.Leaderboard.UI",
+        "UniTask",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro",
+        "UnityEngine.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll",
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

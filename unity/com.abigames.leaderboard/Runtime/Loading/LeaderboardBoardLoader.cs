@@ -75,6 +75,8 @@ namespace AbiGames.Leaderboard
             this.cache = cache;
         }
 
+        public LeaderboardConfig Config => client.Config;
+
         /// <summary>Snapshot gần nhất của board trong phiên này (null nếu chưa tải lần nào).</summary>
         public LeaderboardSnapshot GetLatest(string board)
         {

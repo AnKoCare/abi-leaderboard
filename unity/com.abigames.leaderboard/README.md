@@ -4,7 +4,7 @@ Client bảng xếp hạng người chơi (World + theo quốc gia) cho server
 [`@abigames/leaderboard-server`](../../server/README.md). Tách từ bảng xếp hạng của
 Colony Flow, bỏ hết phần dính game (TW.UGUI, R3, Odin, Zenject, hệ thống profile).
 
-Bản 0.1.0 gồm phần **core** (không UI):
+**Core** (không UI) — dùng được cả khi game tự vẽ bảng:
 
 | Lớp | Làm gì |
 |---|---|
@@ -14,7 +14,7 @@ Bản 0.1.0 gồm phần **core** (không UI):
 | `LeaderboardScoreSubmitter` | Gửi điểm "bắn rồi quên": gộp, chỉ gửi số lớn nhất, thử lại khi lỗi tạm thời, giữ điểm qua lần tắt game |
 | `Testing.FakeLeaderboardTransport` | Server giả trong bộ nhớ — test, demo, dựng UI khi chưa có backend |
 
-UI (danh sách cuộn ảo, ô mặc định, tab World / Country) sẽ có ở bản sau.
+**UI** (uGUI + TextMeshPro, assembly `AbiGames.Leaderboard.UI`) — xem [mục UI](#ui).
 
 ## Cài đặt
 
@@ -26,7 +26,8 @@ dùng khung BaseGame / SDK BackendClient đã có sẵn):
 "com.abigames.leaderboard": "https://github.com/<org>/abi-leaderboard.git?path=/unity/com.abigames.leaderboard#v0.1.0"
 ```
 
-`com.unity.nuget.newtonsoft-json` tự được kéo về. Cần Unity 2022.3 trở lên (đã chạy test trên 6000.3).
+`com.unity.nuget.newtonsoft-json` và `com.unity.ugui` tự được kéo về. Cần **Unity 6** (đã chạy test trên 6000.3). UI dùng
+TextMeshPro: project phải có *TMP Essential Resources* (*Window → TextMeshPro → Import TMP Essential Resources*).
 
 ## Dùng nhanh
 
@@ -92,6 +93,48 @@ int avatar = entry.GetInfoInt("AvatarIndex", 0);
 MyProfileInfo info = entry.InfoAs<MyProfileInfo>();               // hoặc đọc thành class của game
 ```
 
+## UI
+
+| Component | Làm gì |
+|---|---|
+| `LeaderboardBoardView` | Một bảng: danh sách + ô "hạng của tôi" ghim dưới + trạng thái đang tải / trống / lỗi / "dữ liệu lúc ...". Tự tải khi bật, huỷ khi tắt |
+| `LeaderboardVirtualList` | Danh sách cuộn ảo đặt trên `Content` của ScrollRect: 1.000 dòng chỉ dựng ~15 ô. Có `ScrollToIndex` |
+| `LeaderboardCellBase` | Ô gốc — game kế thừa và override `Render(entry, isSelf)` để vẽ theo phong cách riêng |
+| `DefaultLeaderboardCell` | Ô có sẵn: hạng (màu vàng / bạc / đồng cho top 3), avatar, tên, cờ hoặc mã quốc gia, điểm, điểm phụ |
+| `LeaderboardTabsView` | Tab World / Country / board cố định, có điều kiện khoá (vd. chưa đủ level) |
+| `LeaderboardScrollJumpButtons` | Nút lên đầu / tới hạng của tôi / xuống cuối; hiện khi lướt, tự mờ |
+| `LeaderboardAvatarSet`, `LeaderboardCountryFlagSet` | ScriptableObject: sprite avatar theo chỉ số, cờ theo mã quốc gia |
+| `LeaderboardPanelFactory` | Dựng cả panel bằng code (menu, demo, test dùng chung) |
+
+**Bắt đầu nhanh:** *Tools → AbiGames → Leaderboard → Create Sample Panel* dựng panel vào scene
+đang mở; kéo vào Project để thành prefab rồi chỉnh màu / ô theo game. Dựng bằng code thì
+`LeaderboardPanelFactory.CreatePanel(parent, font)` — truyền font của game nếu font mặc định của
+TMP Settings thiếu ký tự (tiếng Việt...). Lúc boot gọi
+`LeaderboardRuntime.Initialize(config)` — panel bật lên là tự tải:
+
+```csharp
+LeaderboardRuntime.Initialize(config);                       // một lần, sau khi biết base URL
+
+tabs.PlayerCountryProvider = () => PlayerData.Instance.CountryCode;
+tabs.IsTabLocked = tab => PlayerData.Instance.CurrentLevel.Value < 10;
+foreach (LeaderboardTab tab in tabs.Tabs)
+{
+    tab.View.SelfProfileProvider = () => JObject.FromObject(new { PlayerName = myName, AvatarIndex = myAvatar });
+    tab.View.EntryClicked += entry => OpenProfile(entry.Uid);
+}
+
+LeaderboardRuntime.Submitter.Submit(currentLevel);           // khi thắng level
+```
+
+- `SelfProfileProvider` dùng cho ô "hạng của tôi" khi người chơi nằm **ngoài top** — lúc đó
+  server chỉ trả hạng, không trả profile.
+- **Ô riêng của game:** kế thừa `LeaderboardCellBase`, override `Render`, gán prefab ô đó vào
+  `CellTemplate` (ô mẫu đặt NGOÀI `Content`, để tắt) và `SelfCell` của `LeaderboardBoardView`.
+  `Render` phải vẽ lại toàn bộ ô — một ô được dùng lại cho nhiều dòng khi cuộn.
+- **Trong popup của khung TW.UGUI:** đặt panel vào prefab modal. Tab tự mở khi modal bật
+  (`OpenOnEnable`); muốn chủ động thì tắt `OpenOnEnable` rồi gọi `tabs.Select(0)` trong `DidPushEnter`.
+- **Game có DI riêng:** bỏ qua `LeaderboardRuntime`, gọi `view.Bind(loader)` cho từng bảng.
+
 ## Dùng chung với SDK BackendClient
 
 SDK đã giữ token và base URL. Lưu ý `baseUrl` của SDK **không** gồm `/api/v1`:
@@ -133,15 +176,21 @@ Huỷ bằng `CancellationToken` vẫn ném `OperationCanceledException` như m�
 
 ## Mẫu
 
-*Package Manager → AbiGames Leaderboard → Samples → Offline Demo*: gắn
-`LeaderboardOfflineDemo` vào một GameObject rồi bấm Play. Bản demo dựng server giả 1.500
-người, tải board World và VN, gửi điểm, rồi in kết quả ra Console.
+*Package Manager → AbiGames Leaderboard → Samples*:
+- **Offline Demo**: gắn `LeaderboardOfflineDemo` vào một GameObject rồi bấm Play. Bản demo dựng
+  server giả 1.500 người, tải board World và VN, gửi điểm, rồi in kết quả ra Console.
+- **UI Demo**: gắn `LeaderboardUIDemo` vào một GameObject trong scene trống rồi bấm Play. Bản demo
+  dựng panel, chạy với server giả; vài giây sau gửi một điểm cao hơn để thấy hạng nhảy.
 
 ## Test
 
-Có test EditMode trong `Tests/Editor`. Thêm `"testables": ["com.abigames.leaderboard"]` vào
-manifest rồi chạy trong *Window → General → Test Runner*, hoặc chạy bằng dòng lệnh:
+Có test EditMode (`Tests/Editor`, phần core) và PlayMode (`Tests/Runtime`, phần UI). Thêm
+`"testables": ["com.abigames.leaderboard"]` vào manifest rồi chạy trong *Window → General → Test Runner*.
+
+Không muốn đụng project game, dùng script dựng project tạm rồi chạy test bằng batchmode:
 
 ```bash
-Unity -batchmode -nographics -projectPath <project> -runTests -testPlatform EditMode -testResults results.xml
+unity/tools/run_unity_tests.sh /tmp/lb-test EditMode
 ```
+
+Còn `unity/tools/compile_check.py` biên dịch nhanh bằng `dotnet` để bắt lỗi C# trong vài giây.

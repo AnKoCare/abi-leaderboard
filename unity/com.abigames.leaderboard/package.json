@@ -1,9 +1,9 @@
 {
   "name": "com.abigames.leaderboard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "AbiGames Leaderboard",
-  "description": "Client bảng xếp hạng người chơi (World + theo quốc gia) cho server @abigames/leaderboard-server: gọi API, tải trang đầu rồi tải nền phần còn lại, cache đĩa, gửi điểm có gộp + thử lại. Cần UniTask (thêm vào manifest của project).",
-  "unity": "2022.3",
+  "description": "Bảng xếp hạng người chơi (World + theo quốc gia) cho server @abigames/leaderboard-server: client API, tải trang đầu rồi tải nền phần còn lại, cache đĩa, gửi điểm có gộp + thử lại, và UI uGUI (danh sách cuộn ảo, ô mặc định, tab World / Country). Cần UniTask (thêm vào manifest của project).",
+  "unity": "6000.0",
   "author": {
     "name": "AbiGames"
   },
@@ -12,13 +12,19 @@
     "abigames"
   ],
   "dependencies": {
-    "com.unity.nuget.newtonsoft-json": "3.2.1"
+    "com.unity.nuget.newtonsoft-json": "3.2.1",
+    "com.unity.ugui": "2.0.0"
   },
   "samples": [
     {
       "displayName": "Offline Demo",
-      "description": "Chạy bảng xếp hạng với server giả lập trong bộ nhớ, in kết quả ra Console — không cần backend.",
+      "description": "Chạy bảng xếp hạng với server giả lập trong bộ nhớ, in kết quả ra Console — không cần backend, không UI.",
       "path": "Samples~/OfflineDemo"
+    },
+    {
+      "displayName": "UI Demo",
+      "description": "Panel bảng xếp hạng dựng sẵn (tab World / Country, danh sách 1.000 dòng, ô hạng của tôi) chạy với server giả lập. Cần TMP Essential Resources.",
+      "path": "Samples~/UIDemo"
     }
   ]
 }
