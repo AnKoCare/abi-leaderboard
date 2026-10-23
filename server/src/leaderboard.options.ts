@@ -42,6 +42,13 @@ export interface LeaderboardModuleOptions {
    * Không cần nếu chúng đã là global.
    */
   imports?: ModuleMetadata['imports'];
+  /**
+   * Đăng ký module global để mọi module của host inject được `LeaderboardService` (vd.
+   * PlayerModule đồng bộ Level, user-purge xoá dòng). Mặc định `true` — chỉ tắt khi host tự
+   * re-export. Đừng gọi `forRoot` lần thứ hai ở module khác: sẽ thành hai bản, route trùng và
+   * cron chạy hai lần.
+   */
+  isGlobal?: boolean;
 
   /** `'template'` (mặc định): dùng bảng `players` của template game-backend. */
   players?:
@@ -102,6 +109,7 @@ export interface ResolvedLeaderboardOptions {
   authGuard: Type<CanActivate>;
   getUserId: (req: any) => string | null | undefined;
   imports: NonNullable<ModuleMetadata['imports']>;
+  isGlobal: boolean;
   players: NonNullable<LeaderboardModuleOptions['players']>;
   templatePlayersTable: string;
   routePrefix: string;
@@ -169,6 +177,7 @@ export function resolveLeaderboardOptions(
     authGuard: options.authGuard,
     getUserId: options.getUserId ?? ((req) => req?.user?.id),
     imports: options.imports ?? [],
+    isGlobal: options.isGlobal ?? true,
     players,
     templatePlayersTable,
     routePrefix: options.routePrefix ?? 'leaderboard',

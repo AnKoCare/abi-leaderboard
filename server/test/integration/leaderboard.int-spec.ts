@@ -243,6 +243,53 @@ describe('abi-leaderboard (MySQL + Redis thật)', () => {
       await flush.flushNow();
       expect(await ds.query('SELECT * FROM leaderboard_entries WHERE uid = ?', [p.uid])).toHaveLength(0);
     });
+
+    it('syncScore (đường lưu profile) không ném: uid bị cấm / điểm hỏng → false, điểm lẻ làm tròn xuống', async () => {
+      const blocked = { playerId: randomUUID(), uid: uidOf(92_000), countryCode: null };
+      await svc.blockUid(blocked.uid);
+      await expect(svc.syncScore(blocked, 40)).resolves.toBe(false);
+
+      const p = { playerId: randomUUID(), uid: uidOf(92_001), countryCode: 'vn' };
+      await expect(svc.syncScore(p, -1)).resolves.toBe(false);
+      await expect(svc.syncScore(p, Number.NaN)).resolves.toBe(false);
+      await expect(svc.syncScore(p, 12.9)).resolves.toBe(true);
+      await flush.flushNow();
+      const rows = await ds.query('SELECT uid, score FROM leaderboard_entries WHERE uid IN (?, ?)', [blocked.uid, p.uid]);
+      expect(rows).toEqual([{ uid: p.uid, score: 12 }]);
+    });
+
+    it('syncScore(userId) lấy quốc gia từ bảng player, đổi quốc gia không bị cache kéo về', async () => {
+      const seed = async (cc: string | null) => {
+        const ids = { userId: randomUUID(), playerId: randomUUID() };
+        await ds.query('INSERT INTO players (id, userId, uid, countryCode, info) VALUES (?, ?, ?, ?, ?)', [
+          ids.playerId, ids.userId, uidOf(93_000 + Math.floor(Math.random() * 999)), cc, '{}',
+        ]);
+        return ids;
+      };
+      const changeCountry = async (ids: { userId: string; playerId: string }, cc: string) => {
+        await ds.query('UPDATE players SET countryCode = ? WHERE id = ?', [cc, ids.playerId]);
+        await svc.syncCountry(ids.playerId, cc, ids.userId);
+      };
+      const rowOf = async (playerId: string) =>
+        (await ds.query('SELECT score, countryCode FROM leaderboard_entries WHERE playerId = ?', [playerId]))[0];
+
+      // Người chơi mới: chọn quốc gia khi chưa có dòng BXH, rồi mới lưu Level.
+      const fresh = await seed(null);
+      await changeCountry(fresh, 'vn');
+      await expect(svc.syncScore(fresh.userId, 3)).resolves.toBe(true);
+
+      // Đổi từ us sang vn khi cache của package đang giữ "us".
+      const mover = await seed('us');
+      await svc.syncScore(mover.userId, 3);
+      await flush.flushNow();
+      await changeCountry(mover, 'vn');
+      await svc.syncScore(mover.userId, 4);
+      await flush.flushNow();
+
+      expect(await rowOf(fresh.playerId)).toEqual({ score: 3, countryCode: 'vn' });
+      expect(await rowOf(mover.playerId)).toEqual({ score: 4, countryCode: 'vn' });
+      await expect(svc.syncScore(randomUUID(), 5)).resolves.toBe(false);
+    });
   });
 
   describe('hạng khớp vị trí trong bảng', () => {

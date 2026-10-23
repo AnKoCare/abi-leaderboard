@@ -1,0 +1,353 @@
+diff --git a/Dockerfile b/Dockerfile
+index ec4f0c9..9e449ec 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -6,6 +6,8 @@ WORKDIR /app
+ 
+ # Copy package files và npm config
+ COPY package*.json .npmrc ./
++# Package nội bộ cài từ tarball trong vendor/ — phải có trước npm install
++COPY vendor ./vendor
+ 
+ # Cài đặt tất cả dependencies (bao gồm dev dependencies để build)
+ RUN npm install
+diff --git a/ormconfig.js b/ormconfig.js
+index 8e09ffa..d337f13 100644
+--- a/ormconfig.js
++++ b/ormconfig.js
+@@ -20,7 +20,10 @@ const dataSource = new DataSource({
+   // Entities and migrations
+   // Include both standard *.entity files and consolidated index-based entities
+   entities: ['dist/**/*.entity{.ts,.js}', 'dist/database/entities/index.js'],
+-  migrations: ['dist/database/migrations/*.js'],
++  migrations: [
++    'dist/database/migrations/*.js',
++    ...require('@abigames/leaderboard-server').LEADERBOARD_MIGRATIONS,
++  ],
+   
+   // Connection settings
+   keepConnectionAlive: true,
+diff --git a/src/app.module.ts b/src/app.module.ts
+index 4daef51..4140c33 100644
+--- a/src/app.module.ts
++++ b/src/app.module.ts
+@@ -8,7 +8,10 @@ import { PlayerModule } from './modules/player/player.module';
+ import { ClanModule } from './modules/clan/clan.module';
+ import { TeamModule } from './modules/team/team.module';
+ import { GameModule } from './modules/game/game.module';
+-import { LeaderboardModule } from './modules/leaderboard/leaderboard.module';
++import { LeaderboardModule } from '@abigames/leaderboard-server';
++import { REDIS_CLIENT } from './redis/redis.module';
++import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
++import { HostJobRunner } from './leaderboard/host-job-runner';
+ import { UserPurgeModule } from './modules/user-purge/user-purge.module';
+ import { HealthController } from './health.controller';
+ import appConfig from './config/app.config';
+@@ -54,7 +57,11 @@ import { CloudSaveModule } from './modules/cloud-save/cloud-save.module';
+     TeamModule,
+     GameModule,
+     DataModule,
+-    LeaderboardModule,
++    LeaderboardModule.forRoot({
++      redisToken: REDIS_CLIENT,
++      authGuard: JwtAuthGuard,
++      jobRunner: HostJobRunner,
++    }),
+     UserPurgeModule,
+     IapModule,
+     AntiCheatModule,
+diff --git a/src/leaderboard/host-job-runner.ts b/src/leaderboard/host-job-runner.ts
+new file mode 100644
+index 0000000..6b71c54
+--- /dev/null
++++ b/src/leaderboard/host-job-runner.ts
+@@ -0,0 +1,20 @@
++import { Inject, Injectable, Logger } from '@nestjs/common';
++import type { RedisClientType } from 'redis';
++import type { LeaderboardJobRunner } from '@abigames/leaderboard-server';
++import { REDIS_CLIENT } from '../redis/redis.module';
++import { isBackgroundJobRunner } from '../common/background-jobs';
++import { HEAVY_JOB_SCHEDULED_WAIT_MS, runExclusiveHeavyJob } from '../common/heavy-job-lock';
++
++@Injectable()
++export class HostJobRunner implements LeaderboardJobRunner {
++  private readonly logger = new Logger('LeaderboardJobs');
++  constructor(@Inject(REDIS_CLIENT) private readonly redis: RedisClientType) {}
++
++  isJobRunner() {
++    return isBackgroundJobRunner();
++  }
++
++  runExclusive(job: string, work: () => Promise<void>) {
++    return runExclusiveHeavyJob(this.redis, this.logger, job, { waitMs: HEAVY_JOB_SCHEDULED_WAIT_MS }, work);
++  }
++}
+diff --git a/src/modules/player/player-info-flush.service.ts b/src/modules/player/player-info-flush.service.ts
+index 17823e7..21bd055 100644
+--- a/src/modules/player/player-info-flush.service.ts
++++ b/src/modules/player/player-info-flush.service.ts
+@@ -11,10 +11,8 @@ import {
+   applyFlushLockWaitTimeout,
+   runWithLockRetryOrSplit,
+ } from '../../common/mysql-lock-retry';
+-import { LeaderboardService } from '../leaderboard/leaderboard.service';
+ import {
+   PendingPlayerInfo,
+-  PendingScore,
+   PlayerInfoCacheService,
+ } from './player-info-cache.service';
+ 
+@@ -34,23 +32,16 @@ export class PlayerInfoFlushService implements OnModuleInit, OnModuleDestroy {
+   private readonly intervalMs: number;
+   private readonly batchSize: number;
+   private readonly maxRoundsPerTick: number;
+-  private readonly scoreBatchSize: number;
+   private timer: ReturnType<typeof setInterval> | null = null;
+-  private scoreTimer: ReturnType<typeof setInterval> | null = null;
+   private flushing = false;
+-  private flushingScores = false;
+ 
+   constructor(
+     private readonly infoCache: PlayerInfoCacheService,
+-    private readonly leaderboardService: LeaderboardService,
+     @InjectDataSource() private readonly dataSource: DataSource,
+   ) {
+     this.intervalMs = Number(process.env.PLAYER_INFO_FLUSH_INTERVAL_MS || 2000);
+     this.batchSize = Number(process.env.PLAYER_INFO_FLUSH_BATCH_SIZE || 500);
+     this.maxRoundsPerTick = Number(process.env.PLAYER_INFO_FLUSH_MAX_ROUNDS || 8);
+-    // Lô điểm tách riêng: bản ghi nhỏ và ghi bằng MỘT câu insert nên chịu được lô
+-    // lớn hơn nhiều so với lô info (vốn là UPDATE ... CASE tốn theo bình phương).
+-    this.scoreBatchSize = Number(process.env.PLAYER_SCORE_FLUSH_BATCH_SIZE || 500);
+   }
+ 
+   onModuleInit() {
+@@ -69,14 +60,6 @@ export class PlayerInfoFlushService implements OnModuleInit, OnModuleDestroy {
+       void this.flushPending();
+     }, this.intervalMs);
+ 
+-    // Timer RIÊNG cho hàng đợi điểm. Chạy chung với vòng lặp info thì nó luôn phải
+-    // đợi tới 8 lô info (mỗi lô vài giây) mới tới lượt, tức bị bỏ đói khi cả hai
+-    // hàng đợi cùng đầy — đúng tình huống gặp trên production.
+-    void this.flushScores();
+-    this.scoreTimer = setInterval(() => {
+-      void this.flushScores();
+-    }, this.intervalMs);
+-
+     this.logger.log(
+       `Player info flush worker started (interval=${this.intervalMs}ms, batch=${this.batchSize})`,
+     );
+@@ -87,10 +70,6 @@ export class PlayerInfoFlushService implements OnModuleInit, OnModuleDestroy {
+       clearInterval(this.timer);
+       this.timer = null;
+     }
+-    if (this.scoreTimer) {
+-      clearInterval(this.scoreTimer);
+-      this.scoreTimer = null;
+-    }
+   }
+ 
+   /**
+@@ -122,7 +101,6 @@ export class PlayerInfoFlushService implements OnModuleInit, OnModuleDestroy {
+           await runWithLockRetryOrSplit(batch, (chunk) =>
+             this.writeInfoBatch(chunk),
+           );
+-          await this.writeLeaderboardBatch(batch);
+           await this.infoCache.completeInflight(batch);
+         } catch (error) {
+           // Ghi hỏng → trả nguyên lô về hàng đợi, không mất bản ghi nào.
+@@ -147,61 +125,6 @@ export class PlayerInfoFlushService implements OnModuleInit, OnModuleDestroy {
+     }
+   }
+ 
+-  /**
+-   * Hàng đợi điểm của `POST /leaderboard/submit`.
+-   *
+-   * Trước đây mỗi request tự chạy một `INSERT ... ON DUPLICATE KEY UPDATE`. Ở 115 rps
+-   * trên bảng `leaderboard_entries` (2,8 triệu dòng, 9 index) chúng chen nhau khoá:
+-   * đo trên production thấy 12 trong số các luồng MySQL đang chạy đều là câu này,
+-   * threads_running vọt lên 47 và hàng đợi write-behind của player-save dồn 22.000 bản ghi.
+-   *
+-   * Gom lô thì cả trăm người chơi chỉ còn một câu lệnh và một lượt khoá.
+-   */
+-  private async flushScores(): Promise<void> {
+-    if (this.flushingScores) return;
+-    this.flushingScores = true;
+-    try {
+-      await this.drainScores();
+-    } finally {
+-      this.flushingScores = false;
+-    }
+-  }
+-
+-  private async drainScores(): Promise<void> {
+-    for (let round = 0; round < this.maxRoundsPerTick; round += 1) {
+-      const batch = await this.infoCache.claimScores(this.scoreBatchSize);
+-      // Chỉ dừng khi hàng đợi thực sự rỗng. KHÔNG dùng `batch.length < batchSize`
+-      // làm dấu hiệu hết hàng: HSCAN trả về XẤP XỈ chứ không đúng bằng COUNT, nên
+-      // điều kiện đó kích hoạt nhầm ngay vòng đầu và mỗi nhịp chỉ rút được một lô.
+-      if (batch.length === 0) return;
+-
+-      // Cùng lý do như lô info: khoá theo thứ tự cố định để không deadlock chéo.
+-      batch.sort((a, b) =>
+-        a.playerId < b.playerId ? -1 : a.playerId > b.playerId ? 1 : 0,
+-      );
+-
+-      try {
+-        await runWithLockRetryOrSplit(batch, async (chunk) => {
+-          await this.leaderboardService.upsertScoresBatch(
+-            chunk.map((e: PendingScore) => ({
+-              playerId: e.playerId,
+-              uid: e.uid,
+-              score: e.score,
+-              countryCode: e.countryCode,
+-              leaguePoint: e.leaguePoint ?? 0,
+-              leagueCycle: e.leagueCycle ?? undefined,
+-            })),
+-          );
+-        });
+-        await this.infoCache.completeScores(batch);
+-      } catch (error) {
+-        await this.infoCache.requeueScores(batch);
+-        this.logger.warn(`flush scores failed: ${(error as Error).message}`);
+-        return;
+-      }
+-    }
+-  }
+-
+   /**
+    * Ghi cả lô bằng một câu UPDATE ... JOIN với bảng hằng `VALUES ROW(...)`.
+    *
+@@ -248,37 +171,4 @@ export class PlayerInfoFlushService implements OnModuleInit, OnModuleDestroy {
+       await runner.release();
+     }
+   }
+-
+-  /**
+-   * Chỉ đồng bộ những bản ghi client có gửi Level — giữ đúng điều kiện của bản cũ
+-   * (PUT thiếu Level không được tạo entry rác với Level mặc định 1).
+-   */
+-  private async writeLeaderboardBatch(pending: PendingPlayerInfo[]): Promise<void> {
+-    const rows = pending.filter(
+-      (entry) =>
+-        entry.uid != null && entry.level != null && Number.isFinite(entry.level),
+-    );
+-    if (rows.length === 0) return;
+-
+-    // KHÔNG ghi thẳng leaderboard_entries ở đây nữa mà đẩy vào cùng hàng đợi điểm.
+-    //
+-    // Trước đó hai worker cùng ghi vào bảng này: flush info (~230/s, đồng bộ Level) và
+-    // flush score (~115/s từ /leaderboard/submit) — phần lớn là CÙNG những dòng đó, nên
+-    // chúng tự tranh khoá với nhau và hàng đợi điểm cứ phình dù MySQL không thiếu CPU.
+-    //
+-    // Dồn về một đường: hash score-pending chỉ giữ bản mới nhất theo playerId nên hai
+-    // nguồn gộp thành một dòng ghi, và chỉ còn duy nhất flushScores chạm vào bảng.
+-    await Promise.all(
+-      rows.map((entry) =>
+-        this.infoCache.queueScore({
+-          playerId: entry.playerId,
+-          uid: entry.uid as string,
+-          score: entry.level as number,
+-          countryCode: entry.countryCode,
+-          leaguePoint: entry.leaguePoint ?? 0,
+-          leagueCycle: entry.leagueCycle,
+-        }),
+-      ),
+-    );
+-  }
+ }
+diff --git a/src/modules/player/player.module.ts b/src/modules/player/player.module.ts
+index e5ecbd0..7b8bf0a 100644
+--- a/src/modules/player/player.module.ts
++++ b/src/modules/player/player.module.ts
+@@ -8,13 +8,11 @@ import { PlayerInfoFlushService } from './player-info-flush.service';
+ import { PlayerSaveFlushService } from './player-save-flush.service';
+ import { PlayerSavePersistService } from './player-save-persist.service';
+ import { Player, User, PlayerSaveData } from '../../database/entities';
+-import { LeaderboardModule } from '../leaderboard/leaderboard.module';
+ import { LeagueTierModule } from '../league-tier/league-tier.module';
+ 
+ @Module({
+   imports: [
+     TypeOrmModule.forFeature([Player, User, PlayerSaveData]),
+-    LeaderboardModule,
+     LeagueTierModule,
+   ],
+   controllers: [PlayerController],
+diff --git a/src/modules/player/player.service.ts b/src/modules/player/player.service.ts
+index 82d1cd6..de3de12 100644
+--- a/src/modules/player/player.service.ts
++++ b/src/modules/player/player.service.ts
+@@ -21,7 +21,7 @@ import { PlayerSavePersistService } from './player-save-persist.service';
+ import { decompressSaveData } from '../../utils/save-data-compression';
+ import { DEFAULT_PLAYER_INFO } from './player-info.defaults';
+ import { PlayerInfoCacheService } from './player-info-cache.service';
+-import { LeaderboardService } from '../leaderboard/leaderboard.service';
++import { LeaderboardService } from '@abigames/leaderboard-server';
+ import { LeagueTierService } from '../league-tier/league-tier.service';
+ import { LeagueStatsService } from '../league-tier/league-stats.service';
+ import { resolveLeagueStanding } from '../league-tier/league-tier.util';
+@@ -206,11 +206,7 @@ export class PlayerService {
+     await this.playerRepository.update(player.id, { countryCode: dto.countryCode });
+     // Snapshot leaderboard phải cập nhật ngay — không thì Country rank trả null
+     // khi entry.countryCode còn null / khác board client đang xem.
+-    await this.leaderboardService.syncCountryCode(
+-      player.id,
+-      player.uid,
+-      dto.countryCode,
+-    );
++    await this.leaderboardService.syncCountry(player.id, dto.countryCode, userId);
+     return {
+       id: player.id,
+       userId: player.userId,
+@@ -257,17 +253,12 @@ export class PlayerService {
+ 
+     if (!queued) {
+       await this.playerRepository.update(player.id, { info: nextInfo });
++    }
+ 
+-      if (level != null) {
+-        await this.leaderboardService.syncScoreFromLevel(
+-          player.id,
+-          player.uid,
+-          player.countryCode,
+-          level,
+-          leaguePoint,
+-          leagueCycle,
+-        );
+-      }
++    // Level lên BXH qua hàng đợi riêng của package (giữ điểm cao nhất theo player).
++    // Truyền userId để package tự tra quốc gia mới nhất; uid bị chặn được bỏ qua lặng lẽ.
++    if (level != null) {
++      await this.leaderboardService.syncScore(userId, level);
+     }
+ 
+     return {
+diff --git a/src/modules/user-purge/user-purge.service.ts b/src/modules/user-purge/user-purge.service.ts
+index 32f7bd5..4cd2a65 100644
+--- a/src/modules/user-purge/user-purge.service.ts
++++ b/src/modules/user-purge/user-purge.service.ts
+@@ -14,6 +14,7 @@ import {
+   PlayerSaveData,
+   User,
+ } from '../../database/entities';
++import { LeaderboardService } from '@abigames/leaderboard-server';
+ import { PlayerSaveCacheService } from '../player/player-save-cache.service';
+ import { AuthUserCacheService } from '../../common/services/auth-user-cache.service';
+ 
+@@ -34,6 +35,7 @@ export class UserPurgeService {
+     @InjectDataSource() private readonly dataSource: DataSource,
+     private readonly saveCache: PlayerSaveCacheService,
+     private readonly authUserCache: AuthUserCacheService,
++    private readonly leaderboard: LeaderboardService,
+   ) {}
+ 
+   /**
+@@ -114,6 +116,8 @@ export class UserPurgeService {
+ 
+     for (const pid of playerIds) {
+       await this.saveCache.invalidatePlayer(pid, userId);
++      // Bỏ cả điểm đang chờ trong hàng đợi BXH, không thì lượt flush kế tiếp ghi lại dòng.
++      await this.leaderboard.removePlayer(pid, userId);
+     }
+     // User vừa bị xoá hẳn — bỏ khỏi cache xác thực để token cũ không còn đi qua
+     // được cho tới khi hết TTL.

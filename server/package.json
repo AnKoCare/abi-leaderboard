@@ -1,6 +1,6 @@
 {
   "name": "@abigames/leaderboard-server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Bảng xếp hạng người chơi (World + theo quốc gia) cho backend NestJS + TypeORM + MySQL + Redis của AbiGames",
   "license": "UNLICENSED",
   "private": true,

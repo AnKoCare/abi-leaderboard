@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.1 — 24/10/2026
+
+Sửa sau lần cài thử vào một bản template game-backend sạch (`file:` tarball, MySQL/Redis thật).
+
+- Module mặc định **global** (option `isGlobal`, mặc định `true`): trước đây `PlayerModule` của
+  host không inject được `LeaderboardService` nếu không tự re-export.
+- Thêm `syncScore(userIdOrPlayer, score)` cho đường lưu profile: uid bị chặn, player không tồn
+  tại hay điểm hỏng thì trả `false` thay vì ném lỗi (giống `syncScoreFromLevel` cũ của template);
+  truyền `userId` thì quốc gia lấy từ bảng player qua cache mà `syncCountry` xoá.
+- README: Dockerfile phải `COPY vendor` trước `npm install`; migration khai báo trong
+  `ormconfig.js` (template chạy migration bằng CLI); hướng dẫn nối `PUT /player/info` vào
+  `syncScore(userId, …)` thay cho worker flush info (hàng đợi info chỉ giữ bản mới nhất nên
+  làm mất Level cao hơn; cache player của template không có `countryCode`); cron dày cho dev;
+  insert tay vào blocklist.
+
 ## 0.1.0 — 22/10/2026
 
 Bản đầu, tách từ module leaderboard của Colony Flow (prod commit `e241f8c`).

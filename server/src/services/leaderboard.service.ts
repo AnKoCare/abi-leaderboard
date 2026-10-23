@@ -122,6 +122,33 @@ export class LeaderboardService {
     };
   }
 
+  /**
+   * Bản "đồng bộ ngầm" của `submitForPlayer`, cho đường lưu profile (`PUT /player/info`):
+   * uid bị chặn, player không tồn tại, hoặc điểm âm / không phải số thì bỏ qua và trả `false`
+   * thay vì ném lỗi — request lưu profile không được hỏng vì BXH. Điểm lẻ làm tròn xuống,
+   * điểm quá trần bị kẹp. Lỗi hạ tầng (MySQL chết khi Redis cũng chết) vẫn ném như thường.
+   *
+   * Nên truyền `userId`: package tự tra player qua cache riêng mà `syncCountry(…, userId)`
+   * xoá, nên quốc gia luôn đúng. Truyền `LeaderboardPlayer` thì `countryCode` phải mới —
+   * `null` giữ nguyên quốc gia của dòng đang có, nhưng dòng tạo mới sẽ không có quốc gia.
+   */
+  async syncScore(
+    target: string | LeaderboardPlayer,
+    score: number,
+    secondaryScore = 0,
+  ): Promise<boolean> {
+    if (!Number.isFinite(score) || score < 0) return false;
+    const player = typeof target === 'string' ? await this.resolvePlayer(target) : target;
+    if (!player) return false;
+    try {
+      await this.submitForPlayer(player, Math.min(Math.floor(score), MAX_SCORE), secondaryScore);
+      return true;
+    } catch (error) {
+      if (error instanceof ForbiddenException) return false;
+      throw error;
+    }
+  }
+
   private resultOf(write: ScoreWrite): Omit<LeaderboardSubmitResult, 'scoreUpdatedAt'> {
     return {
       playerId: write.playerId,

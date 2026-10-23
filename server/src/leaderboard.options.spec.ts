@@ -24,6 +24,7 @@ describe('resolveLeaderboardOptions', () => {
     expect(o.uidPattern.test('0123456789')).toBe(false);
     expect(o.countryCodes.has('vn')).toBe(true);
     expect(o.cron).not.toBe(false);
+    expect(o.isGlobal).toBe(true);
   });
 
   it("không bao giờ coi 'ww' là một quốc gia", () => {

@@ -36,19 +36,36 @@ repo host: build Docker không cần quyền truy cập git hay registry nào.
 
 ```bash
 # trong repo abi-leaderboard
-cd server && npm install && npm run pack:release      # → abigames-leaderboard-server-0.1.0.tgz
+cd server && npm install && npm run pack:release      # → abigames-leaderboard-server-0.1.1.tgz
 
 # trong repo host
-mkdir -p vendor && cp …/abigames-leaderboard-server-0.1.0.tgz vendor/
-npm install ./vendor/abigames-leaderboard-server-0.1.0.tgz
+mkdir -p vendor && cp …/abigames-leaderboard-server-0.1.1.tgz vendor/
+npm install ./vendor/abigames-leaderboard-server-0.1.1.tgz
 ```
 
-Nhớ để `Dockerfile` của host copy cả thư mục `vendor/` trước bước `npm ci`.
+`package.json` của host sẽ có `"@abigames/leaderboard-server": "file:vendor/…tgz"`, nên
+`Dockerfile` phải copy `vendor/` **trước** bước cài package. Dockerfile của template copy
+`package*.json` rồi `npm install` trước khi `COPY . .` — thêm một dòng:
+
+```dockerfile
+COPY package*.json .npmrc ./
+COPY vendor ./vendor          # ← thêm
+RUN npm install
+```
+
+`cron` là peer dependency nhưng template không khai báo trực tiếp — nó đã có sẵn qua
+`@nestjs/schedule`, npm tự dùng bản đó.
 
 ## Cài vào template game-backend
 
 Template đã có sẵn một module leaderboard cũ, dùng cùng route và cùng bảng. Package
 **thay thế** module đó và dùng lại nguyên bảng cùng dữ liệu đang có.
+
+Toàn bộ các bước dưới đây đã chạy thử trên một bản template sạch (cài tarball, migration trên
+DB trống, app chạy cluster 2 worker, gọi đủ đăng nhập → đổi quốc gia → lưu Level → submit →
+cron dựng bảng → top / rank → purge). Diff đầy đủ của lần đó nằm ở
+[`examples/template-integration/template-game-backend.patch`](examples/template-integration/template-game-backend.patch)
+(không gồm `package.json` / `package-lock.json` do `npm install` tự sửa).
 
 ### 1. Đăng ký module
 
@@ -71,32 +88,76 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 export class AppModule {}
 ```
 
-Bỏ `LeaderboardModule` cũ (`src/modules/leaderboard`) khỏi `imports`.
+- Bỏ `LeaderboardModule` cũ khỏi `imports` của **cả** `AppModule` lẫn `PlayerModule`
+  (`src/modules/player/player.module.ts`). Thư mục `src/modules/leaderboard` để lại hay xoá
+  đều được — không còn ai import thì nó không chạy.
+- Module của package là **global**: mọi module của host inject được `LeaderboardService` mà
+  không cần import gì. Chỉ gọi `forRoot` **một lần** ở `AppModule`.
+- Entity cũ `LeaderboardEntry` / `LeaderboardBlockedUid` trong `src/database/entities` cứ để
+  nguyên (user-purge còn dùng): hai bên cùng trỏ một bảng, đã chạy thử không xung đột.
 
 ### 2. Nối các chỗ đang gọi module cũ
 
-Tìm các chỗ đang gọi: `grep -rn "leaderboardService\." src`.
+Tìm các chỗ đang gọi: `grep -rn "leaderboardService\.\|queueScore\|drainScores" src`.
+Đổi import `'../leaderboard/leaderboard.service'` thành `'@abigames/leaderboard-server'`.
+
+**`PlayerService.updatePlayerInfo`** (`PUT /player/info`) — đồng bộ Level ngay trên đường
+request, cho cả nhánh có hàng đợi lẫn nhánh ghi thẳng:
+
+```ts
+const queued = await this.infoCache.queueUpdate({ … });
+if (!queued) {
+  await this.playerRepository.update(player.id, { info: nextInfo });
+}
+if (level != null) {
+  await this.leaderboardService.syncScore(userId, level);
+}
+```
+
+- `syncScore` **không ném lỗi** khi uid bị chặn (trả `false`), nên người bị chặn vẫn lưu
+  được profile. `submitForPlayer` thì ném 403 — chỉ dùng khi muốn báo lỗi cho client.
+- Truyền **`userId`**, đừng truyền `{ playerId, uid, countryCode }` lấy từ
+  `resolvePlayerByUserId`: player trong cache của template chỉ có `id` và `uid`, nên
+  `countryCode` luôn là `null` và người chơi mới chọn quốc gia sẽ không có mặt ở bảng quốc gia.
+  Truyền `userId` thì package tự tra bảng `players` (có cache riêng, được `syncCountry` xoá).
+
+**`PlayerInfoFlushService`** — bỏ hẳn phần điểm: lời gọi và hàm `writeLeaderboardBatch`,
+`flushScores` / `drainScores` / `scoreTimer`, và `LeaderboardService` trong constructor. Đừng
+chuyển `writeLeaderboardBatch` sang gọi `syncScore`: hàng đợi info chỉ giữ **bản mới nhất** của
+mỗi player, nên hai lần lưu liền nhau (Level 80 rồi 10) sẽ làm mất số 80; hàng đợi của package
+thì giữ **số cao nhất**. Các hàm `queueScore` / `claimScores` / `requeueScores` của
+`PlayerInfoCacheService` thành thừa, xoá sau cũng được.
 
 | Chỗ gọi cũ | Thay bằng |
 |---|---|
-| `syncScoreFromLevel(playerId, uid, countryCode, level, …)` (khi `PUT /player/info`) | `leaderboard.submitForPlayer({ playerId, uid, countryCode }, level)` |
-| `upsertScoresBatch(...)` trong worker flush của player info | Bỏ đi — package tự có hàng đợi và worker riêng; chỉ cần gọi `submitForPlayer` ở đường request |
-| `syncCountryCode(playerId, uid, countryCode)` (khi `PATCH /player/country`) | `leaderboard.syncCountry(playerId, countryCode, userId)` |
-| `user-purge` xoá `leaderboard_entries` | `leaderboard.removePlayer(playerId, userId)` (vẫn giữ được câu DELETE cũ) |
+| `syncScoreFromLevel(…)` + `upsertScoresBatch(…)` | `syncScore(userId, level)` như trên |
+| `syncCountryCode(player.id, player.uid, cc)` (`PATCH /player/country`) | `syncCountry(player.id, cc, userId)` |
+| `user-purge` xoá `leaderboard_entries` | giữ câu DELETE, thêm `removePlayer` sau transaction (dưới) |
 
-`LeaderboardService` của package được export, inject như service bình thường.
+```ts
+// UserPurgeService.purgeByUid, sau transaction
+for (const pid of playerIds) {
+  await this.saveCache.invalidatePlayer(pid, userId);
+  await this.leaderboard.removePlayer(pid, userId); // bỏ cả điểm đang chờ trong hàng đợi
+}
+```
 
 ### 3. Migration
 
-```ts
-// src/config/database.config.ts
-import { LEADERBOARD_MIGRATIONS } from '@abigames/leaderboard-server';
+Template chạy migration bằng `npm run migration:run` (`start-app.sh` gọi lúc container khởi
+động), tức là đọc **`ormconfig.js`** — sửa ở đó:
 
-migrations: ['dist/database/migrations/*.js', ...LEADERBOARD_MIGRATIONS],
+```js
+// ormconfig.js
+migrations: [
+  'dist/database/migrations/*.js',
+  ...require('@abigames/leaderboard-server').LEADERBOARD_MIGRATIONS,
+],
 ```
 
-Rồi chạy `npm run migration:run` như mọi migration khác. Migration chạy lại bao nhiêu
-lần cũng được:
+`migrations` trong `src/config/database.config.ts` không được dùng (app không tự chạy
+migration), thêm vào đó cũng không hại. Migration của package có mốc `1790000000000`, chạy sau
+mọi migration của template. Chạy lại bao nhiêu lần cũng được:
 - DB chưa có bảng: tạo đầy đủ.
 - Bảng có từ template cũ: chỉ thêm cột / index còn thiếu, giữ nguyên dữ liệu và khoá
   ngoại cũ. Bản rất cũ (chưa có cột `rankedAt`) sẽ UPDATE toàn bảng một lần, nên chạy
@@ -115,12 +176,13 @@ Nên cắm khoá job nặng chung của template vào để job của BXH xếp 
 khác, thay vì dùng khoá riêng của package:
 
 ```ts
+// src/leaderboard/host-job-runner.ts
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { RedisClientType } from 'redis';
 import type { LeaderboardJobRunner } from '@abigames/leaderboard-server';
-import { REDIS_CLIENT } from './redis/redis.module';
-import { isBackgroundJobRunner } from './common/background-jobs';
-import { HEAVY_JOB_SCHEDULED_WAIT_MS, runExclusiveHeavyJob } from './common/heavy-job-lock';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import { isBackgroundJobRunner } from '../common/background-jobs';
+import { HEAVY_JOB_SCHEDULED_WAIT_MS, runExclusiveHeavyJob } from '../common/heavy-job-lock';
 
 @Injectable()
 export class HostJobRunner implements LeaderboardJobRunner {
@@ -159,6 +221,7 @@ cũ (`lb:top:v4:*`, `lb:rank:v4:*`, …) tự hết hạn sau tối đa 1 giờ.
 | `authGuard` | **bắt buộc** | guard của host, gắn vào `POST submit` |
 | `getUserId` | `req => req.user.id` | |
 | `imports` | `[]` | module cần import để resolve token / guard / provider |
+| `isGlobal` | `true` | `LeaderboardService` inject được ở mọi module của host |
 | `players` | `'template'` | hoặc `{ resolver, profileProvider }` |
 | `templatePlayersTable` | `'players'` | |
 | `routePrefix` | `'leaderboard'` | |
@@ -186,7 +249,8 @@ cũ (`lb:top:v4:*`, `lb:rank:v4:*`, …) tự hết hạn sau tối đa 1 giờ.
 ```ts
 constructor(private readonly leaderboard: LeaderboardService) {}
 
-await leaderboard.submitForPlayer({ playerId, uid, countryCode }, level, secondaryScore?);
+await leaderboard.syncScore(userId, level);             // đồng bộ khi lưu profile; uid bị chặn → false, không ném
+await leaderboard.submitForPlayer({ playerId, uid, countryCode }, level, secondaryScore?); // ném 403 nếu bị chặn
 await leaderboard.syncCountry(playerId, 'vn', userId);   // đổi quốc gia
 await leaderboard.removePlayer(playerId, userId);        // BẮT BUỘC khi xoá tài khoản
 await leaderboard.blockUid(uid, 'lý do');                // cấm + đưa điểm về 0
@@ -234,7 +298,21 @@ uid không có trên board đó thì body rỗng (null).
 **Độ trễ:**
 - Điểm vào DB sau một nhịp flush (2 giây).
 - Lên bảng và đổi hạng sau lượt dựng kế tiếp: tối đa khoảng 20 phút cho bảng; hạng cache tối đa 1 giờ.
+- Hạng của người vừa lên một mức điểm đã có trong histogram (dựng 15 phút một lần) là số
+  xấp xỉ cho tới lượt dựng sau; `total` lúc đó cũng là số của lần dựng trước.
 - Bảng xếp hạng không cần realtime; đây là cái giá để `/top` và `/rank` chịu được tải lớn.
+
+**Thử tay trên máy dev:** gửi điểm xong mà `/top` chưa đổi là đúng thiết kế — bảng chỉ dựng
+lại theo cron. Muốn thấy ngay thì cho cron chạy dày ở môi trường dev:
+
+```ts
+LeaderboardModule.forRoot({
+  // …
+  cron: process.env.NODE_ENV === 'production'
+    ? undefined
+    : { topBoards: '*/30 * * * * *', histograms: '*/30 * * * * *' },
+}),
+```
 
 ## Vận hành
 
@@ -249,6 +327,9 @@ uid không có trên board đó thì body rỗng (null).
 - **Cron:**
   - Lịch mặc định lệch khỏi mốc :00 / :30 và lệch nhau.
   - Không chạy lúc khởi động: deploy cuốn chiếu giờ cao điểm không làm MySQL quá tải.
+- **Chặn uid gian lận:** gọi `blockUid(uid, lý do)` (cấm + đưa điểm về 0 ngay). Insert tay
+  vào `leaderboard_blocked_uids` thì phải tự điền `id` (`UUID()`), mỗi tiến trình nạp lại
+  danh sách sau tối đa 60 giây, và điểm cũ vẫn nằm trên bảng cho tới khi bạn tự đưa về 0.
 - **Worker flush:**
   - Dòng hỏng vì chính dữ liệu của nó (quá dài, khoá ngoại tới player đã bị xoá…) bị bỏ kèm log `bỏ điểm không ghi được`.
   - Lỗi tạm thời (khoá, mất kết nối) thì cả lô được trả về hàng đợi để thử lại.

@@ -38,7 +38,7 @@ namespace AbiGames.Leaderboard.Samples
             {
                 int level = Random.Range(1, 1800);
                 server.AddPlayer((1_000_000_000L + i).ToString(), level, countries[i % countries.Length],
-                    new { PlayerName = "Player " + i, Level = level, AvatarIndex = i % 5 });
+                    new { PlayerName = "Player " + i, Level = level, AvatarIndex = Random.Range(0, 5) });
             }
             server.AddPlayer(MyUid, myLevel, myCountry, new { PlayerName = "Me", Level = myLevel, AvatarIndex = 2 });
             server.SetToken(MyToken, MyUid);

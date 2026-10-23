@@ -52,6 +52,7 @@ export class LeaderboardModule {
           ];
 
     return {
+      global: resolved.isGlobal,
       module: LeaderboardModule,
       imports: [TypeOrmModule.forFeature([LeaderboardEntry, LeaderboardBlockedUid]), ...resolved.imports],
       controllers: [createLeaderboardController(resolved.routePrefix, resolved.swaggerTag)],

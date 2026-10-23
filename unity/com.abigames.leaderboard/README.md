@@ -22,12 +22,28 @@ Package cần **UniTask** — thêm vào `Packages/manifest.json` nếu project 
 dùng khung BaseGame / SDK BackendClient đã có sẵn):
 
 ```json
-"com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
-"com.abigames.leaderboard": "https://github.com/<org>/abi-leaderboard.git?path=/unity/com.abigames.leaderboard#v0.1.0"
+"com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask#2.5.11",
+"com.abigames.leaderboard": "https://github.com/<org>/abi-leaderboard.git?path=/unity/com.abigames.leaderboard#v0.2.0"
 ```
 
-`com.unity.nuget.newtonsoft-json` và `com.unity.ugui` tự được kéo về. Cần **Unity 6** (đã chạy test trên 6000.3). UI dùng
-TextMeshPro: project phải có *TMP Essential Resources* (*Window → TextMeshPro → Import TMP Essential Resources*).
+Chưa có repo git thì trỏ thẳng vào thư mục package (đường dẫn tuyệt đối, hoặc tương đối so
+với thư mục `Packages/`):
+
+```json
+"com.abigames.leaderboard": "file:../../abi-leaderboard/unity/com.abigames.leaderboard"
+```
+
+`com.unity.nuget.newtonsoft-json` và `com.unity.ugui` tự được kéo về. Cần **Unity 6** (đã chạy
+test trên 6000.3). Sau khi Unity cài xong:
+
+1. UI dùng TextMeshPro: *Window → TextMeshPro → Import TMP Essential Resources* (project mới
+   chưa có). Thiếu bước này panel vẫn chạy nhưng chữ không hiện.
+2. *Window → Package Manager → AbiGames Leaderboard → Samples*: import **UI Demo**, tạo scene
+   trống, gắn `LeaderboardUIDemo` vào một GameObject rồi bấm Play — chạy với server giả, không
+   cần backend.
+
+Đã thử đúng các bước trên trong một project Unity 6 trống (chỉ có module mặc định): cài
+không lỗi, không warning, sample và menu *Create Sample Panel* chạy được.
 
 ## Dùng nhanh
 
