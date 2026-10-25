@@ -139,7 +139,12 @@ export class BoardService {
 
   /** Đọc top từ DB rồi nạp profile theo lô. Provider lỗi thì NÉM ra — không cache bảng thiếu profile cả giờ. */
   async buildBoard(board: string): Promise<LeaderboardTopEntry[]> {
-    const rows = await this.store.loadTop(board, this.options.topLimit);
+    // uid bị chặn không lên bảng, kể cả khi bị chèn tay vào blocklist mà điểm chưa về 0.
+    // Đọc dư đúng số uid bị chặn để bảng vẫn đủ `topLimit` dòng.
+    const blocked = await this.store.loadBlockedUids();
+    const rows = (await this.store.loadTop(board, this.options.topLimit + blocked.size))
+      .filter((row) => !blocked.has(row.uid))
+      .slice(0, this.options.topLimit);
     const profiles = await this.loadProfiles(rows.map((r) => r.playerId));
     const season = this.options.secondaryScore.enabled
       ? await this.seasons.currentSeason()

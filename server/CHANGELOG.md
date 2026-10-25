@@ -9,6 +9,9 @@ Sửa sau lần cài thử vào một bản template game-backend sạch (`file:
 - Thêm `syncScore(userIdOrPlayer, score)` cho đường lưu profile: uid bị chặn, player không tồn
   tại hay điểm hỏng thì trả `false` thay vì ném lỗi (giống `syncScoreFromLevel` cũ của template);
   truyền `userId` thì quốc gia lấy từ bảng player qua cache mà `syncCountry` xoá.
+- uid bị chặn không lên bảng (lọc lúc dựng, đọc dư cho đủ `topLimit` dòng) và `/rank` trả null.
+  Trước đây `blockUid` chỉ đưa điểm về 0, nên game ít người chơi vẫn thấy uid đó ở cuối bảng;
+  uid chèn tay vào blocklist thì giữ nguyên điểm trên bảng.
 - README: Dockerfile phải `COPY vendor` trước `npm install`; migration khai báo trong
   `ormconfig.js` (template chạy migration bằng CLI); hướng dẫn nối `PUT /player/info` vào
   `syncScore(userId, …)` thay cho worker flush info (hàng đợi info chỉ giữ bản mới nhất nên

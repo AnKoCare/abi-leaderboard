@@ -28,7 +28,7 @@ index 8e09ffa..d337f13 100644
    // Connection settings
    keepConnectionAlive: true,
 diff --git a/src/app.module.ts b/src/app.module.ts
-index 4daef51..4140c33 100644
+index 4daef51..fda0393 100644
 --- a/src/app.module.ts
 +++ b/src/app.module.ts
 @@ -8,7 +8,10 @@ import { PlayerModule } from './modules/player/player.module';
@@ -43,7 +43,7 @@ index 4daef51..4140c33 100644
  import { UserPurgeModule } from './modules/user-purge/user-purge.module';
  import { HealthController } from './health.controller';
  import appConfig from './config/app.config';
-@@ -54,7 +57,11 @@ import { CloudSaveModule } from './modules/cloud-save/cloud-save.module';
+@@ -54,7 +57,14 @@ import { CloudSaveModule } from './modules/cloud-save/cloud-save.module';
      TeamModule,
      GameModule,
      DataModule,
@@ -52,6 +52,9 @@ index 4daef51..4140c33 100644
 +      redisToken: REDIS_CLIENT,
 +      authGuard: JwtAuthGuard,
 +      jobRunner: HostJobRunner,
++      cron: process.env.NODE_ENV === 'production'
++        ? undefined
++        : { topBoards: '*/30 * * * * *', histograms: '*/30 * * * * *' },
 +    }),
      UserPurgeModule,
      IapModule,

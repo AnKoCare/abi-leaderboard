@@ -253,7 +253,7 @@ await leaderboard.syncScore(userId, level);             // đồng bộ khi lưu
 await leaderboard.submitForPlayer({ playerId, uid, countryCode }, level, secondaryScore?); // ném 403 nếu bị chặn
 await leaderboard.syncCountry(playerId, 'vn', userId);   // đổi quốc gia
 await leaderboard.removePlayer(playerId, userId);        // BẮT BUỘC khi xoá tài khoản
-await leaderboard.blockUid(uid, 'lý do');                // cấm + đưa điểm về 0
+await leaderboard.blockUid(uid, 'lý do');                // cấm + đưa điểm về 0 + gỡ khỏi bảng
 await leaderboard.unblockUid(uid);
 await leaderboard.getTop('ww', 100, 0);                  // object
 await leaderboard.getRank(uid, 'vn');                    // null nếu không có trên board
@@ -327,9 +327,11 @@ LeaderboardModule.forRoot({
 - **Cron:**
   - Lịch mặc định lệch khỏi mốc :00 / :30 và lệch nhau.
   - Không chạy lúc khởi động: deploy cuốn chiếu giờ cao điểm không làm MySQL quá tải.
-- **Chặn uid gian lận:** gọi `blockUid(uid, lý do)` (cấm + đưa điểm về 0 ngay). Insert tay
-  vào `leaderboard_blocked_uids` thì phải tự điền `id` (`UUID()`), mỗi tiến trình nạp lại
-  danh sách sau tối đa 60 giây, và điểm cũ vẫn nằm trên bảng cho tới khi bạn tự đưa về 0.
+- **Chặn uid gian lận:** gọi `blockUid(uid, lý do)`: cấm submit, đưa điểm về 0, `/rank` trả
+  null ngay; uid biến khỏi bảng ở lượt dựng kế tiếp (muốn ngay thì `refreshNow()`). Insert tay
+  vào `leaderboard_blocked_uids` cũng được (phải tự điền `id = UUID()`): bảng lọc uid đó ở lượt
+  dựng kế tiếp, submit và `/rank` bị chặn sau tối đa 60 giây, nhưng điểm cũ vẫn được tính khi
+  đếm hạng của người khác cho tới khi đưa về 0 — nên dùng `blockUid`.
 - **Worker flush:**
   - Dòng hỏng vì chính dữ liệu của nó (quá dài, khoá ngoại tới player đã bị xoá…) bị bỏ kèm log `bỏ điểm không ghi được`.
   - Lỗi tạm thời (khoá, mất kết nối) thì cả lô được trả về hàng đợi để thử lại.

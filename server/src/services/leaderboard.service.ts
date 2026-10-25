@@ -245,6 +245,8 @@ export class LeaderboardService {
     if (!this.options.uidPattern.test(String(uid ?? ''))) {
       throw new BadRequestException('uid không đúng định dạng');
     }
+    // Không có trên bảng thì cũng không có hạng (blocklist nạp lại sau tối đa 60 giây).
+    if (await this.isUidBlocked(uid)) return null;
     return this.ranks.getRank(uid, board);
   }
 

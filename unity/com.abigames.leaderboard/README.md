@@ -23,7 +23,7 @@ dùng khung BaseGame / SDK BackendClient đã có sẵn):
 
 ```json
 "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask#2.5.11",
-"com.abigames.leaderboard": "https://github.com/<org>/abi-leaderboard.git?path=/unity/com.abigames.leaderboard#v0.2.0"
+"com.abigames.leaderboard": "https://github.com/<org>/abi-leaderboard.git?path=/unity/com.abigames.leaderboard#unity-v0.2.0"
 ```
 
 Chưa có repo git thì trỏ thẳng vào thư mục package (đường dẫn tuyệt đối, hoặc tương đối so
@@ -82,7 +82,7 @@ async UniTaskVoid OpenBoard(string board)
 
 void Render(LeaderboardSnapshot s)
 {
-    list.SetItems(s.Entries);                                      // tối đa 1.000 dòng
+    myList.Show(s.Entries);                                        // danh sách của game; tối đa 1.000 dòng
     loading.SetActive(s.Entries.Count == 0 && s.Stage != LeaderboardLoadStage.Failed);
     staleLabel.text = s.IsFromCache ? $"Dữ liệu lúc {s.CachedAtLocalTime:HH:mm dd/MM}" : "";
     myRankCell.gameObject.SetActive(s.SelfRank != null);          // null = không có trên board

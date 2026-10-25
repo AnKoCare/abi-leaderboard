@@ -431,6 +431,25 @@ describe('abi-leaderboard (MySQL + Redis thật)', () => {
       expect(['', 'null', '{}']).toContain(notOnBoard.text || '');
     });
 
+    it('uid bị chặn không lên bảng và không có hạng, kể cả khi chèn tay vào blocklist', async () => {
+      const server = t.app.getHttpServer();
+      for (const [user, score] of [['u-1', 50], ['u-2', 40], ['u-3', 10]] as const) {
+        await request(server).post('/leaderboard/submit').set('x-user-id', user).send({ score }).expect(201);
+      }
+      await flush.flushNow();
+      // Chèn tay (điểm vẫn giữ 50, đứng đầu) như cách vận hành thủ công.
+      await ds.query('INSERT INTO leaderboard_blocked_uids (id, uid, reason) VALUES (UUID(), ?, ?)', [uidOf(10), 'tay']);
+      // Chặn qua API (điểm về 0).
+      await svc.blockUid(uidOf(12), 'api');
+      await svc.refreshNow();
+
+      const top = await request(server).get('/leaderboard/top?countryCode=ww').expect(200);
+      expect(top.body.entries.map((e: any) => [e.rank, e.uid])).toEqual([[1, uidOf(11)]]);
+      expect(top.body.boardTotal).toBe(1);
+      const blockedRank = await request(server).get(`/leaderboard/rank?uid=${uidOf(12)}&countryCode=ww`).expect(200);
+      expect(['', 'null', '{}']).toContain(blockedRank.text || '');
+    });
+
     it('chặn request sai', async () => {
       const server = t.app.getHttpServer();
       await request(server).post('/leaderboard/submit').send({ score: 5 }).expect(403);
