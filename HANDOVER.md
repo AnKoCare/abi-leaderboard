@@ -168,7 +168,7 @@ Làm theo [`unity/com.abigames.leaderboard/README.md`](unity/com.abigames.leader
    (gitignore). Tarball có kèm README và CHANGELOG, nên đóng gói **sau** khi sửa tài liệu.
 5. **Tag theo từng phần:** repo chứa hai package nên tag có tiền tố, ví dụ `server-v0.1.1` và
    `unity-v0.2.0`. URL Unity:
-   `https://github.com/<org>/abi-leaderboard.git?path=/unity/com.abigames.leaderboard#unity-v0.2.0`.
+   `https://github.com/AnKoCare/abi-leaderboard.git?path=/unity/com.abigames.leaderboard#unity-v0.2.0`.
 6. Game đang dùng bản cũ: server thì chép tarball mới vào `vendor/` rồi `npm install`; Unity thì
    đổi tag trong `manifest.json`.
 
@@ -179,7 +179,8 @@ thôi" như migration hiện có. Đừng sửa migration đã phát hành.
 
 - **Chưa đo tải riêng cho package** (`/top` khi cache hit, `/rank` đường histogram trên bảng
   hàng triệu dòng). Nên đo trên máy test trước khi một game lớn dùng.
-- **Chưa cài từ git tag thật:** repo chưa có remote. Các lần cài thử đều bằng `file:`.
+- **Chưa cài thử từ git tag:** repo nằm ở `github.com/AnKoCare/abi-leaderboard`, nhưng các lần
+  cài thử đều dùng `file:`.
 - **Chưa cuộn thử UI trên máy Android thật**, chưa ghép vào UI của game nào.
 - **Histogram theo từng mức điểm:** chỉ hợp với điểm có ít giá trị (Level). Điểm dải rộng cần
   histogram theo khoảng — chưa có.

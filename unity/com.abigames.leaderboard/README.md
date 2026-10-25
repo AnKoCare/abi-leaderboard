@@ -23,7 +23,7 @@ dùng khung BaseGame / SDK BackendClient đã có sẵn):
 
 ```json
 "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask#2.5.11",
-"com.abigames.leaderboard": "https://github.com/<org>/abi-leaderboard.git?path=/unity/com.abigames.leaderboard#unity-v0.2.0"
+"com.abigames.leaderboard": "https://github.com/AnKoCare/abi-leaderboard.git?path=/unity/com.abigames.leaderboard#unity-v0.2.0"
 ```
 
 Chưa có repo git thì trỏ thẳng vào thư mục package (đường dẫn tuyệt đối, hoặc tương đối so

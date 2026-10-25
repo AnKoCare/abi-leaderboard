@@ -3,6 +3,8 @@
 Bảng xếp hạng người chơi (World + theo quốc gia) theo Level, đóng gói để dùng lại ở các game
 của AbiGames, tách từ Colony Flow.
 
+Repo: <https://github.com/AnKoCare/abi-leaderboard>
+
 **Mới nhận package? Đọc [`HANDOVER.md`](HANDOVER.md) trước.** Trong đó có cách hệ thống chạy,
 checklist tích hợp khoảng nửa ngày, những chỗ dễ sai và cách phát hành bản mới.
 
