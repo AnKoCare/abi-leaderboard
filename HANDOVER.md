@@ -6,7 +6,7 @@ game khác của AbiGames dùng lại. Tài liệu này dành cho dev nhận pac
 
 | Phần | Bản | Kiểm chứng |
 |---|---|---|
-| Server `@abigames/leaderboard-server` (`server/`) | **0.1.1** | 18 unit + 19 integration test trên MySQL 8 / Redis 7 thật (Node 20; unit cả Node 18); cài thử vào một bản template game-backend sạch, chạy cluster 2 worker, `smoke-test.sh` qua |
+| Server `@abigames/leaderboard-server` (`server/`) | **0.1.1** | 19 unit + 19 integration test trên MySQL 8 / Redis 7 thật (Node 20; unit cả Node 18); cài thử vào một bản template game-backend sạch, chạy cluster 2 worker, `smoke-test.sh` qua |
 | Unity `com.abigames.leaderboard` (`unity/com.abigames.leaderboard`) | **0.2.0** | 47 EditMode + 9 PlayMode test trên Unity 6000.3; cài thử vào project Unity 6 trống, chạy sample, chụp ảnh |
 
 **Chưa chạy production.** Cơ chế chịu tải giữ nguyên bản đang chạy ở Colony Flow (vài triệu
@@ -72,7 +72,7 @@ của lần cài thử nằm ở
 
 | # | Việc | Xong khi |
 |---|---|---|
-| 1 | Lấy tarball `abigames-leaderboard-server-0.1.1.tgz` (build bằng `npm run pack:release` trong `server/`, cần Node 20), chép vào `vendor/` của host, `npm install ./vendor/…tgz`. Thêm `COPY vendor ./vendor` trước `RUN npm install` trong Dockerfile | `docker build` qua |
+| 1 | Lấy tarball `abigames-leaderboard-server-0.1.1.tgz` (build: `cd server && npm ci && npm run pack:release`, Node 18 trở lên), chép vào `vendor/` của host, `npm install ./vendor/…tgz`. Thêm `COPY vendor ./vendor` trước `RUN npm install` trong Dockerfile | `docker build` qua |
 | 2 | `LeaderboardModule.forRoot({ redisToken, authGuard, jobRunner })` trong `AppModule`; bỏ module leaderboard cũ khỏi `AppModule` **và** `PlayerModule`; thêm `HostJobRunner` | `nest build` qua |
 | 3 | `PUT /player/info` gọi `syncScore(userId, level)`; `PATCH /player/country` gọi `syncCountry(playerId, cc, userId)`; user-purge gọi `removePlayer`; bỏ phần điểm trong `PlayerInfoFlushService` | `grep -rn "leaderboardService\.\|queueScore" src` chỉ còn lời gọi API mới |
 | 4 | Thêm `LEADERBOARD_MIGRATIONS` vào `ormconfig.js`, chạy `npm run migration:run` | log có `LeaderboardSchema1790000000000 has been executed` |
@@ -150,7 +150,7 @@ Làm theo [`unity/com.abigames.leaderboard/README.md`](unity/com.abigames.leader
 
 | Phần | Lệnh | Ghi chú |
 |---|---|---|
-| Server unit | `cd server && npm install && npm test` | Node 20 (đã chạy cả Node 18) |
+| Server unit | `cd server && npm ci && npm test` | Node 20 (đã chạy cả Node 18) |
 | Server integration | xem [`server/test/integration/README.md`](server/test/integration/README.md) | dựng 2 container MySQL + Redis dùng một lần; test chạy `FLUSHDB` nên trỏ vào DB Redis riêng (`redis://…/5`) nếu cạnh app khác |
 | Unity, nhanh | `python3 unity/tools/compile_check.py --project <project Unity có UniTask> --out <tmp> Runtime Editor Tests Samples~` | biên dịch bằng `dotnet`, vài giây |
 | Unity, đầy đủ | `unity/tools/run_unity_tests.sh <tmp> EditMode` (và `PlayMode`) | dựng project tạm, lấy UniTask từ `Library/PackageCache` của một project có sẵn (mặc định AntFood — truyền tham số thứ 4 nếu máy bạn không có) |
@@ -179,8 +179,10 @@ thôi" như migration hiện có. Đừng sửa migration đã phát hành.
 
 - **Chưa đo tải riêng cho package** (`/top` khi cache hit, `/rank` đường histogram trên bảng
   hàng triệu dòng). Nên đo trên máy test trước khi một game lớn dùng.
-- **Chưa cài thử từ git tag:** repo nằm ở `github.com/AnKoCare/abi-leaderboard`, nhưng các lần
-  cài thử đều dùng `file:`.
+- **Cài từ git:** package Unity đã cài thử từ `github.com/AnKoCare/abi-leaderboard` vào project
+  Unity 6 trống (không lỗi, không warning, đủ `.meta`, test của package 47 + 9 qua ngay trên bản
+  cài từ git). Server đã clone sạch rồi build bằng `npm ci` + `npm run pack:release`, smoke test
+  qua trên template.
 - **Chưa cuộn thử UI trên máy Android thật**, chưa ghép vào UI của game nào.
 - **Histogram theo từng mức điểm:** chỉ hợp với điểm có ít giá trị (Level). Điểm dải rộng cần
   histogram theo khoảng — chưa có.

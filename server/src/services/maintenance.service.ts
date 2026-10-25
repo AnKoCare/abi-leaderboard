@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
-import { CronJob } from 'cron';
+import { createRequire } from 'module';
 import type { RedisClientType } from 'redis';
 import {
   FIRST_SEASON,
@@ -15,6 +15,18 @@ import { LeaderboardKeys } from '../util/redis-keys';
 import { BoardService } from './board.service';
 import { LeaderboardStore } from './leaderboard.store';
 import { RankService } from './rank.service';
+
+type ScheduleCronJob = ReturnType<SchedulerRegistry['getCronJob']>;
+
+/**
+ * `CronJob` lấy từ đúng bản `cron` mà `@nestjs/schedule` dùng, không import `cron` trực tiếp.
+ * Host hay có hai bản cùng lúc (vd. `cron` 3.5 ở top-level cạnh 3.2.1 lồng trong
+ * `@nestjs/schedule` 4.1.2): import thẳng thì lấy nhầm bản top-level, build package hỏng vì
+ * `addCronJob` chỉ nhận đúng kiểu của bản lồng.
+ */
+const { CronJob } = createRequire(require.resolve('@nestjs/schedule'))('cron') as {
+  CronJob: new (cronTime: string, onTick: () => void) => ScheduleCronJob;
+};
 
 /**
  * Cron bảo trì: dựng sẵn bảng, dựng histogram tính hạng, reset điểm phụ khi sang mùa.

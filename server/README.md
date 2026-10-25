@@ -22,7 +22,7 @@ và tính hạng bằng histogram điểm thay cho COUNT trên bảng hàng tri�
 | Client node-redis v4 đăng ký qua một injection token | `REDIS_CLIENT` (global) |
 | `ScheduleModule.forRoot()` | có trong `AppModule` |
 | Guard xác thực gắn `req.user.id` | `JwtAuthGuard` |
-| `@nestjs/swagger` 7, class-validator, class-transformer, `cron` 3 | có |
+| `@nestjs/swagger` 7, class-validator, class-transformer | có |
 | Global `ValidationPipe({ transform: true })` | có trong `main.ts` |
 | Bảng người chơi: `id`, `userId`, `uid`, `countryCode`, `info` (JSON) | bảng `players` |
 
@@ -36,7 +36,7 @@ repo host: build Docker không cần quyền truy cập git hay registry nào.
 
 ```bash
 # trong repo abi-leaderboard
-cd server && npm install && npm run pack:release      # → abigames-leaderboard-server-0.1.1.tgz
+cd server && npm ci && npm run pack:release           # → abigames-leaderboard-server-0.1.1.tgz
 
 # trong repo host
 mkdir -p vendor && cp …/abigames-leaderboard-server-0.1.1.tgz vendor/
@@ -53,8 +53,8 @@ COPY vendor ./vendor          # ← thêm
 RUN npm install
 ```
 
-`cron` là peer dependency nhưng template không khai báo trực tiếp — nó đã có sẵn qua
-`@nestjs/schedule`, npm tự dùng bản đó.
+Package không cần host cài `cron`: job được tạo bằng đúng bản `cron` mà `@nestjs/schedule` của
+host đang dùng.
 
 ## Cài vào template game-backend
 
@@ -360,7 +360,7 @@ LeaderboardModule.forRoot({
 ## Phát triển package
 
 ```bash
-npm install
+npm ci                   # đúng phiên bản trong package-lock.json
 npm test                 # unit test
 npm run test:integration # MySQL + Redis thật — xem test/integration/README.md
 npm run build            # → dist/

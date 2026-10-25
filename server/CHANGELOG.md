@@ -12,6 +12,10 @@ Sửa sau lần cài thử vào một bản template game-backend sạch (`file:
 - uid bị chặn không lên bảng (lọc lúc dựng, đọc dư cho đủ `topLimit` dòng) và `/rank` trả null.
   Trước đây `blockUid` chỉ đưa điểm về 0, nên game ít người chơi vẫn thấy uid đó ở cuối bảng;
   uid chèn tay vào blocklist thì giữ nguyên điểm trên bảng.
+- Không còn cần peer `cron`: `CronJob` lấy từ đúng bản `cron` của `@nestjs/schedule`. Trước đây
+  clone sạch rồi `npm install` thì build hỏng (`cron` 3.5 ở top-level cạnh 3.2.1 lồng trong
+  `@nestjs/schedule` 4.1.2 — `addCronJob` không nhận kiểu của bản kia). Thêm `package-lock.json`
+  để build lặp lại được; test mới chạy cron thật qua `SchedulerRegistry`.
 - README: Dockerfile phải `COPY vendor` trước `npm install`; migration khai báo trong
   `ormconfig.js` (template chạy migration bằng CLI); hướng dẫn nối `PUT /player/info` vào
   `syncScore(userId, …)` thay cho worker flush info (hàng đợi info chỉ giữ bản mới nhất nên
